@@ -43,6 +43,7 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
   const [attendanceRecords, setAttendanceRecords] = useState<Record<string, AttendanceRecord>>({});
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchData = async () => {
     try {
@@ -167,8 +168,17 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
     }
   };
 
+  const filteredMissionaries = missionaries.filter((missionary) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      missionary.missionary_name.toLowerCase().includes(query) ||
+      missionary.id_number.toLowerCase().includes(query)
+    );
+  });
+
   const exportToExcel = () => {
-    const exportData = missionaries.map((missionary) => {
+    const exportData = filteredMissionaries.map((missionary) => {
       const attendance = attendanceRecords[missionary.id];
       return {
         Name: missionary.missionary_name,
@@ -203,6 +213,14 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
         </div>
       </CardHeader>
       <CardContent className="pt-6">
+        <div className="mb-4">
+          <Input
+            placeholder="Search by name or ID number..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-sm"
+          />
+        </div>
         <div className="flex flex-wrap items-center gap-3 mb-6 p-4 bg-muted/50 rounded-lg">
           <span className="text-sm font-medium">Filter by Date Range:</span>
           
@@ -295,14 +313,14 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {missionaries.length === 0 ? (
+              {filteredMissionaries.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground">
-                    No missionaries registered yet
+                    {searchQuery ? "No missionaries found matching your search" : "No missionaries registered yet"}
                   </TableCell>
                 </TableRow>
               ) : (
-                missionaries.map((missionary) => {
+                filteredMissionaries.map((missionary) => {
                   const isEditing = editingId === missionary.id;
                   const attendance = attendanceRecords[missionary.id];
 
