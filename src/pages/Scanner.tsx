@@ -19,13 +19,14 @@ const Scanner = () => {
     
     setIsProcessing(true);
     try {
-      const qrData = JSON.parse(data);
+      // QR code now contains only the ID number
+      const idNumber = data.trim();
       
       // Fetch missionary by ID number
       const { data: missionary, error: fetchError } = await supabase
         .from("missionaries")
         .select("*")
-        .eq("id_number", qrData.id)
+        .eq("id_number", idNumber)
         .single();
 
       if (fetchError || !missionary) {

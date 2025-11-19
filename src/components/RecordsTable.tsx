@@ -5,8 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, Trash2, FileSpreadsheet, Save } from "lucide-react";
+import { Download, Trash2, FileSpreadsheet, Save, QrCode } from "lucide-react";
 import * as XLSX from "xlsx";
+import { QRCodeSVG } from "qrcode.react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 
 interface Missionary {
   id: string;
@@ -186,18 +189,19 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Age</TableHead>
-                <TableHead>ID Number</TableHead>
-                <TableHead>Attendance</TableHead>
-                <TableHead>Last Scan</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Age</TableHead>
+              <TableHead>ID Number</TableHead>
+              <TableHead>QR Code</TableHead>
+              <TableHead>Attendance</TableHead>
+              <TableHead>Last Scan</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {missionaries.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     No missionaries registered yet
                   </TableCell>
                 </TableRow>
@@ -238,6 +242,24 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
                         ) : (
                           missionary.id_number
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <QrCode className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle>{missionary.missionary_name} - QR Code</DialogTitle>
+                            </DialogHeader>
+                            <div className="flex flex-col items-center gap-4 p-4">
+                              <QRCodeSVG value={missionary.id_number} size={250} level="H" />
+                              <p className="text-sm text-muted-foreground">ID: {missionary.id_number}</p>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
                       </TableCell>
                       <TableCell>
                         <span
