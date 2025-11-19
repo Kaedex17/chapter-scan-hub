@@ -27,11 +27,8 @@ export const RegistrationForm = ({ chapter, onRegistrationComplete }: Registrati
     setIsSubmitting(true);
 
     try {
-      const qrData = JSON.stringify({
-        id: formData.idNumber,
-        name: formData.missionaryName,
-        chapter: chapter,
-      });
+      // QR code based only on ID number so it never changes
+      const qrData = formData.idNumber;
 
       const { error } = await supabase.from("missionaries").insert({
         missionary_name: formData.missionaryName,
