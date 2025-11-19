@@ -5,11 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, Trash2, FileSpreadsheet, Save, QrCode } from "lucide-react";
+import { Download, Trash2, FileSpreadsheet, Save, QrCode, CalendarIcon, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface Missionary {
   id: string;
@@ -37,6 +41,8 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<Missionary>>({});
   const [attendanceRecords, setAttendanceRecords] = useState<Record<string, AttendanceRecord>>({});
+  const [startDate, setStartDate] = useState<Date | undefined>();
+  const [endDate, setEndDate] = useState<Date | undefined>();
 
   const fetchData = async () => {
     try {
@@ -50,16 +56,28 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
       if (missionariesError) throw missionariesError;
       setMissionaries(missionariesData || []);
 
-      // Fetch latest attendance records
-      const { data: attendanceData, error: attendanceError } = await supabase
+      // Build attendance query with date filtering
+      let attendanceQuery = supabase
         .from("attendance_records")
         .select("*")
-        .eq("chapter", chapter)
-        .order("scanned_at", { ascending: false });
+        .eq("chapter", chapter);
+
+      // Apply date range filter if dates are selected
+      if (startDate) {
+        attendanceQuery = attendanceQuery.gte("scanned_at", startDate.toISOString());
+      }
+      if (endDate) {
+        // Set to end of day
+        const endOfDay = new Date(endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+        attendanceQuery = attendanceQuery.lte("scanned_at", endOfDay.toISOString());
+      }
+
+      const { data: attendanceData, error: attendanceError } = await attendanceQuery.order("scanned_at", { ascending: false });
 
       if (attendanceError) throw attendanceError;
 
-      // Create a map of missionary_id to latest attendance record
+      // Create a map of missionary_id to latest attendance record in the date range
       const attendanceMap: Record<string, AttendanceRecord> = {};
       (attendanceData || []).forEach((record: any) => {
         if (!attendanceMap[record.missionary_id]) {
@@ -106,7 +124,7 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [chapter, refreshTrigger]);
+  }, [chapter, refreshTrigger, startDate, endDate]);
 
   const handleEdit = (missionary: Missionary) => {
     setEditingId(missionary.id);
@@ -185,6 +203,84 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
         </div>
       </CardHeader>
       <CardContent className="pt-6">
+        <div className="flex flex-wrap items-center gap-3 mb-6 p-4 bg-muted/50 rounded-lg">
+          <span className="text-sm font-medium">Filter by Date Range:</span>
+          
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "justify-start text-left font-normal",
+                  !startDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "PPP") : "Start Date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={startDate}
+                onSelect={setStartDate}
+                initialFocus
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+
+          <span className="text-muted-foreground">to</span>
+
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                className={cn(
+                  "justify-start text-left font-normal",
+                  !endDate && "text-muted-foreground"
+                )}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {endDate ? format(endDate, "PPP") : "End Date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={endDate}
+                onSelect={setEndDate}
+                initialFocus
+                className="pointer-events-auto"
+              />
+            </PopoverContent>
+          </Popover>
+
+          {(startDate || endDate) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStartDate(undefined);
+                setEndDate(undefined);
+              }}
+              className="h-8"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Clear
+            </Button>
+          )}
+
+          {(startDate || endDate) && (
+            <Badge variant="secondary" className="ml-auto">
+              {startDate && endDate
+                ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
+                : startDate
+                ? `From ${format(startDate, "MMM d, yyyy")}`
+                : `Until ${format(endDate!, "MMM d, yyyy")}`}
+            </Badge>
+          )}
+        </div>
         <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
