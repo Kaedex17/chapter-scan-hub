@@ -1,24 +1,124 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, Upload, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Camera, Upload, CheckCircle2, Zap, Clock, CheckCheck, XCircle } from "lucide-react";
 import { QrReader } from "react-qr-reader";
+
+interface QueueItem {
+  id: string;
+  idNumber: string;
+  timestamp: number;
+  status: "pending" | "processing" | "success" | "error";
+  name?: string;
+  chapter?: string;
+  error?: string;
+}
 
 const Scanner = () => {
   const [scanMode, setScanMode] = useState<"camera" | "upload" | null>(null);
+  const [batchMode, setBatchMode] = useState(false);
+  const [scanQueue, setScanQueue] = useState<QueueItem[]>([]);
   const [scannedData, setScannedData] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const lastScannedRef = useRef<{ id: string; timestamp: number } | null>(null);
-  const SCAN_COOLDOWN = 3000; // 3 seconds cooldown between same ID scans
+  const SCAN_COOLDOWN = 1000; // 1 second cooldown in batch mode
+  const processingRef = useRef(false);
+
+  // Process queue items in batch mode
+  useEffect(() => {
+    if (!batchMode || processingRef.current) return;
+
+    const processQueue = async () => {
+      const pendingItems = scanQueue.filter(item => item.status === "pending");
+      if (pendingItems.length === 0) return;
+
+      processingRef.current = true;
+
+      for (const item of pendingItems) {
+        setScanQueue(prev => 
+          prev.map(q => q.id === item.id ? { ...q, status: "processing" } : q)
+        );
+
+        try {
+          const { data: missionary, error: fetchError } = await supabase
+            .from("missionaries")
+            .select("id, id_number, missionary_name, chapter")
+            .eq("id_number", item.idNumber)
+            .single();
+
+          if (fetchError || !missionary) {
+            setScanQueue(prev => 
+              prev.map(q => q.id === item.id 
+                ? { ...q, status: "error", error: "Not found" } 
+                : q)
+            );
+            continue;
+          }
+
+          const { error: attendanceError } = await supabase
+            .from("attendance_records")
+            .insert({
+              missionary_id: missionary.id,
+              missionary_name: missionary.missionary_name,
+              chapter: missionary.chapter,
+              attendance_status: "Present",
+            });
+
+          if (attendanceError?.code === "23505") {
+            setScanQueue(prev => 
+              prev.map(q => q.id === item.id 
+                ? { 
+                    ...q, 
+                    status: "error", 
+                    name: missionary.missionary_name,
+                    chapter: missionary.chapter,
+                    error: "Already marked" 
+                  } 
+                : q)
+            );
+          } else if (attendanceError) {
+            setScanQueue(prev => 
+              prev.map(q => q.id === item.id 
+                ? { ...q, status: "error", error: "Processing error" } 
+                : q)
+            );
+          } else {
+            setScanQueue(prev => 
+              prev.map(q => q.id === item.id 
+                ? { 
+                    ...q, 
+                    status: "success", 
+                    name: missionary.missionary_name,
+                    chapter: missionary.chapter 
+                  } 
+                : q)
+            );
+          }
+        } catch (error) {
+          setScanQueue(prev => 
+            prev.map(q => q.id === item.id 
+              ? { ...q, status: "error", error: "System error" } 
+              : q)
+          );
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 300)); // Throttle requests
+      }
+
+      processingRef.current = false;
+    };
+
+    processQueue();
+  }, [scanQueue, batchMode]);
 
   const processQRData = async (data: string) => {
-    if (isProcessing) return;
-    
     const idNumber = data.trim();
     const now = Date.now();
     
@@ -27,14 +127,30 @@ const Scanner = () => {
       lastScannedRef.current?.id === idNumber &&
       now - lastScannedRef.current.timestamp < SCAN_COOLDOWN
     ) {
-      toast.info("Please wait before scanning again");
       return;
     }
     
+    lastScannedRef.current = { id: idNumber, timestamp: now };
+
+    if (batchMode) {
+      // Add to queue in batch mode
+      const queueItem: QueueItem = {
+        id: `${idNumber}-${now}`,
+        idNumber,
+        timestamp: now,
+        status: "pending"
+      };
+      
+      setScanQueue(prev => [...prev, queueItem]);
+      toast.success("Added to queue");
+      return;
+    }
+
+    // Normal single scan mode
+    if (isProcessing) return;
     setIsProcessing(true);
     
     try {
-      // Fetch missionary by ID number (optimized with index)
       const { data: missionary, error: fetchError } = await supabase
         .from("missionaries")
         .select("id, id_number, missionary_name, chapter")
@@ -47,10 +163,6 @@ const Scanner = () => {
         return;
       }
 
-      // Update last scanned reference
-      lastScannedRef.current = { id: idNumber, timestamp: now };
-
-      // Record attendance with error handling
       const { error: attendanceError } = await supabase
         .from("attendance_records")
         .insert({
@@ -61,7 +173,6 @@ const Scanner = () => {
         });
 
       if (attendanceError) {
-        // Check if it's a duplicate entry
         if (attendanceError.code === "23505") {
           toast.warning(`${missionary.missionary_name} already marked present today`);
         } else {
@@ -71,17 +182,15 @@ const Scanner = () => {
         toast.success(`Attendance marked for ${missionary.missionary_name}!`);
       }
 
-      // Show success UI
       setScannedData({
         name: missionary.missionary_name,
         chapter: missionary.chapter,
         id: missionary.id_number,
       });
 
-      // Auto-reset for continuous scanning
       setTimeout(() => {
         setScannedData(null);
-        setScanMode("camera"); // Keep camera active
+        setScanMode("camera");
         setIsProcessing(false);
       }, 2000);
     } catch (error: any) {
@@ -89,6 +198,19 @@ const Scanner = () => {
       toast.error("Processing error. Please try again.");
       setIsProcessing(false);
     }
+  };
+
+  const clearQueue = () => {
+    setScanQueue([]);
+    toast.info("Queue cleared");
+  };
+
+  const stats = {
+    total: scanQueue.length,
+    pending: scanQueue.filter(q => q.status === "pending").length,
+    processing: scanQueue.filter(q => q.status === "processing").length,
+    success: scanQueue.filter(q => q.status === "success").length,
+    error: scanQueue.filter(q => q.status === "error").length,
   };
 
   const handleScan = (result: any) => {
@@ -117,12 +239,31 @@ const Scanner = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-background">
       <div className="container mx-auto px-4 py-8">
-        <Link to="/">
-          <Button variant="outline" className="mb-8">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
-          </Button>
-        </Link>
+        <div className="flex justify-between items-center mb-8">
+          <Link to="/">
+            <Button variant="outline">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Dashboard
+            </Button>
+          </Link>
+
+          {scanMode === "camera" && (
+            <Button
+              variant={batchMode ? "default" : "outline"}
+              onClick={() => {
+                setBatchMode(!batchMode);
+                if (!batchMode) {
+                  toast.success("Batch mode enabled");
+                } else {
+                  toast.info("Batch mode disabled");
+                }
+              }}
+            >
+              <Zap className="h-4 w-4 mr-2" />
+              Batch Mode
+            </Button>
+          )}
+        </div>
 
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="text-center space-y-2">
@@ -172,28 +313,108 @@ const Scanner = () => {
           )}
 
           {scanMode === "camera" && !scannedData && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Camera Scanner</span>
-                  <Button variant="outline" size="sm" onClick={() => setScanMode(null)}>
-                    Cancel
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-lg overflow-hidden border-4 border-secondary">
-                  <QrReader
-                    onResult={handleScan}
-                    constraints={{ facingMode: "environment" }}
-                    videoStyle={{ width: "100%" }}
-                  />
-                </div>
-                <p className="text-sm text-muted-foreground text-center mt-4">
-                  Position the QR code within the camera frame
-                </p>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <Card className={batchMode ? "lg:col-span-2" : "lg:col-span-3"}>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span>Camera Scanner</span>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      setScanMode(null);
+                      setBatchMode(false);
+                      setScanQueue([]);
+                    }}>
+                      Cancel
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="rounded-lg overflow-hidden border-4 border-secondary">
+                    <QrReader
+                      onResult={handleScan}
+                      constraints={{ facingMode: "environment" }}
+                      videoStyle={{ width: "100%" }}
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center mt-4">
+                    {batchMode 
+                      ? "Scan multiple QR codes - they will be queued and processed automatically"
+                      : "Position the QR code within the camera frame"}
+                  </p>
+                </CardContent>
+              </Card>
+
+              {batchMode && (
+                <Card className="lg:col-span-1">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between text-base">
+                      <span>Batch Queue</span>
+                      {scanQueue.length > 0 && (
+                        <Button variant="ghost" size="sm" onClick={clearQueue}>
+                          Clear
+                        </Button>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Badge variant="secondary" className="justify-center py-2">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {stats.pending}
+                      </Badge>
+                      <Badge variant="default" className="justify-center py-2">
+                        <CheckCheck className="h-3 w-3 mr-1" />
+                        {stats.success}
+                      </Badge>
+                    </div>
+
+                    {stats.error > 0 && (
+                      <Badge variant="destructive" className="w-full justify-center py-2">
+                        <XCircle className="h-3 w-3 mr-1" />
+                        {stats.error} Errors
+                      </Badge>
+                    )}
+
+                    <ScrollArea className="h-[400px]">
+                      <div className="space-y-2">
+                        {scanQueue.slice().reverse().map((item) => (
+                          <div
+                            key={item.id}
+                            className={`p-3 rounded-lg border text-sm ${
+                              item.status === "success"
+                                ? "bg-secondary/20 border-secondary"
+                                : item.status === "error"
+                                ? "bg-destructive/10 border-destructive"
+                                : item.status === "processing"
+                                ? "bg-primary/10 border-primary animate-pulse"
+                                : "bg-muted border-border"
+                            }`}
+                          >
+                            <div className="font-medium">
+                              {item.name || `ID: ${item.idNumber}`}
+                            </div>
+                            {item.chapter && (
+                              <div className="text-xs text-muted-foreground">
+                                {item.chapter}
+                              </div>
+                            )}
+                            {item.error && (
+                              <div className="text-xs text-destructive mt-1">
+                                {item.error}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {scanQueue.length === 0 && (
+                          <div className="text-center text-muted-foreground py-8">
+                            No items in queue
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
 
           {scannedData && (
