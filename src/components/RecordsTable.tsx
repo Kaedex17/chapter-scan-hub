@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Download, Trash2, FileSpreadsheet, Save, QrCode, CalendarIcon, X } from "lucide-react";
+import { Download, Trash2, FileSpreadsheet, Save, QrCode, CalendarIcon, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import * as XLSX from "xlsx";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -44,6 +44,8 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
   const [startDate, setStartDate] = useState<Date | undefined>();
   const [endDate, setEndDate] = useState<Date | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortColumn, setSortColumn] = useState<"name" | "age" | "id_number" | "attendance" | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
 
   const fetchData = async () => {
     try {
@@ -168,6 +170,22 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
     }
   };
 
+  const handleSort = (column: "name" | "age" | "id_number" | "attendance") => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortIcon = (column: "name" | "age" | "id_number" | "attendance") => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-1" />;
+    }
+    return sortDirection === "asc" ? <ArrowUp className="h-4 w-4 ml-1" /> : <ArrowDown className="h-4 w-4 ml-1" />;
+  };
+
   const filteredMissionaries = missionaries.filter((missionary) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
@@ -177,8 +195,33 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
     );
   });
 
+  const sortedMissionaries = [...filteredMissionaries].sort((a, b) => {
+    if (!sortColumn) return 0;
+
+    let comparison = 0;
+    
+    switch (sortColumn) {
+      case "name":
+        comparison = a.missionary_name.localeCompare(b.missionary_name);
+        break;
+      case "age":
+        comparison = a.age - b.age;
+        break;
+      case "id_number":
+        comparison = a.id_number.localeCompare(b.id_number);
+        break;
+      case "attendance":
+        const aAttendance = attendanceRecords[a.id] ? 1 : 0;
+        const bAttendance = attendanceRecords[b.id] ? 1 : 0;
+        comparison = aAttendance - bAttendance;
+        break;
+    }
+
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+
   const exportToExcel = () => {
-    const exportData = filteredMissionaries.map((missionary) => {
+    const exportData = sortedMissionaries.map((missionary) => {
       const attendance = attendanceRecords[missionary.id];
       return {
         Name: missionary.missionary_name,
@@ -303,24 +346,60 @@ export const RecordsTable = ({ chapter, refreshTrigger }: RecordsTableProps) => 
           <Table>
             <TableHeader>
               <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Age</TableHead>
-              <TableHead>ID Number</TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSort("name")}
+                  className="h-auto p-0 font-medium hover:bg-transparent"
+                >
+                  Name
+                  {getSortIcon("name")}
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSort("age")}
+                  className="h-auto p-0 font-medium hover:bg-transparent"
+                >
+                  Age
+                  {getSortIcon("age")}
+                </Button>
+              </TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSort("id_number")}
+                  className="h-auto p-0 font-medium hover:bg-transparent"
+                >
+                  ID Number
+                  {getSortIcon("id_number")}
+                </Button>
+              </TableHead>
               <TableHead>QR Code</TableHead>
-              <TableHead>Attendance</TableHead>
+              <TableHead>
+                <Button
+                  variant="ghost"
+                  onClick={() => handleSort("attendance")}
+                  className="h-auto p-0 font-medium hover:bg-transparent"
+                >
+                  Attendance
+                  {getSortIcon("attendance")}
+                </Button>
+              </TableHead>
               <TableHead>Last Scan</TableHead>
               <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMissionaries.length === 0 ? (
+              {sortedMissionaries.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-muted-foreground">
                     {searchQuery ? "No missionaries found matching your search" : "No missionaries registered yet"}
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredMissionaries.map((missionary) => {
+                sortedMissionaries.map((missionary) => {
                   const isEditing = editingId === missionary.id;
                   const attendance = attendanceRecords[missionary.id];
 
