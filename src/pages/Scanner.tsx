@@ -13,19 +13,31 @@ const Scanner = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const lastScannedRef = useRef<{ id: string; timestamp: number } | null>(null);
+  const SCAN_COOLDOWN = 3000; // 3 seconds cooldown between same ID scans
 
   const processQRData = async (data: string) => {
     if (isProcessing) return;
     
+    const idNumber = data.trim();
+    const now = Date.now();
+    
+    // Check cooldown to prevent duplicate scans
+    if (
+      lastScannedRef.current?.id === idNumber &&
+      now - lastScannedRef.current.timestamp < SCAN_COOLDOWN
+    ) {
+      toast.info("Please wait before scanning again");
+      return;
+    }
+    
     setIsProcessing(true);
+    
     try {
-      // QR code now contains only the ID number
-      const idNumber = data.trim();
-      
-      // Fetch missionary by ID number
+      // Fetch missionary by ID number (optimized with index)
       const { data: missionary, error: fetchError } = await supabase
         .from("missionaries")
-        .select("*")
+        .select("id, id_number, missionary_name, chapter")
         .eq("id_number", idNumber)
         .single();
 
@@ -35,32 +47,46 @@ const Scanner = () => {
         return;
       }
 
-      // Record attendance
-      const { error: attendanceError } = await supabase.from("attendance_records").insert({
-        missionary_id: missionary.id,
-        missionary_name: missionary.missionary_name,
-        chapter: missionary.chapter,
-        attendance_status: "Present",
-      });
+      // Update last scanned reference
+      lastScannedRef.current = { id: idNumber, timestamp: now };
 
-      if (attendanceError) throw attendanceError;
+      // Record attendance with error handling
+      const { error: attendanceError } = await supabase
+        .from("attendance_records")
+        .insert({
+          missionary_id: missionary.id,
+          missionary_name: missionary.missionary_name,
+          chapter: missionary.chapter,
+          attendance_status: "Present",
+        });
 
+      if (attendanceError) {
+        // Check if it's a duplicate entry
+        if (attendanceError.code === "23505") {
+          toast.warning(`${missionary.missionary_name} already marked present today`);
+        } else {
+          throw attendanceError;
+        }
+      } else {
+        toast.success(`Attendance marked for ${missionary.missionary_name}!`);
+      }
+
+      // Show success UI
       setScannedData({
         name: missionary.missionary_name,
         chapter: missionary.chapter,
         id: missionary.id_number,
       });
 
-      toast.success(`Attendance marked for ${missionary.missionary_name}!`);
-
-      // Reset after 3 seconds
+      // Auto-reset for continuous scanning
       setTimeout(() => {
         setScannedData(null);
-        setScanMode(null);
+        setScanMode("camera"); // Keep camera active
         setIsProcessing(false);
-      }, 3000);
+      }, 2000);
     } catch (error: any) {
-      toast.error("Invalid QR code or processing error");
+      console.error("Scan error:", error);
+      toast.error("Processing error. Please try again.");
       setIsProcessing(false);
     }
   };
