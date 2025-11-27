@@ -17,6 +17,8 @@ interface QueueItem {
   name?: string;
   chapter?: string;
   error?: string;
+  checksum?: string;
+  verified?: boolean;
 }
 
 const Scanner = () => {
@@ -119,7 +121,37 @@ const Scanner = () => {
   }, [scanQueue, batchMode]);
 
   const processQRData = async (data: string) => {
-    const idNumber = data.trim();
+    let idNumber: string;
+    let checksum: string | undefined;
+    let verified = false;
+
+    // Try to parse as JSON first
+    try {
+      const parsed = JSON.parse(data.trim());
+      if (parsed.idNumber) {
+        idNumber = parsed.idNumber.toString().trim();
+        checksum = parsed.checksum;
+        
+        // Simple checksum validation if present
+        if (checksum) {
+          const expectedChecksum = idNumber.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0).toString(36);
+          verified = checksum === expectedChecksum;
+          
+          if (!verified) {
+            toast.warning("Checksum mismatch - proceeding with caution");
+          } else {
+            verified = true;
+          }
+        }
+      } else {
+        // JSON but no idNumber field - treat as plain text
+        idNumber = data.trim();
+      }
+    } catch {
+      // Not JSON, treat as plain text ID
+      idNumber = data.trim();
+    }
+
     const now = Date.now();
     
     // Check cooldown to prevent duplicate scans
@@ -138,11 +170,13 @@ const Scanner = () => {
         id: `${idNumber}-${now}`,
         idNumber,
         timestamp: now,
-        status: "pending"
+        status: "pending",
+        checksum,
+        verified
       };
       
       setScanQueue(prev => [...prev, queueItem]);
-      toast.success("Added to queue");
+      toast.success(verified ? "✓ Verified & queued" : "Added to queue");
       return;
     }
 
@@ -389,8 +423,15 @@ const Scanner = () => {
                                 : "bg-muted border-border"
                             }`}
                           >
-                            <div className="font-medium">
-                              {item.name || `ID: ${item.idNumber}`}
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium">
+                                {item.name || `ID: ${item.idNumber}`}
+                              </div>
+                              {item.verified && (
+                                <Badge variant="outline" className="text-xs">
+                                  ✓ Verified
+                                </Badge>
+                              )}
                             </div>
                             {item.chapter && (
                               <div className="text-xs text-muted-foreground">
