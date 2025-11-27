@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,6 @@ const Scanner = () => {
   const [scannedData, setScannedData] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
   const lastScannedRef = useRef<{ id: string; timestamp: number } | null>(null);
   const SCAN_COOLDOWN = 1000; // 1 second cooldown in batch mode
   const processingRef = useRef(false);
