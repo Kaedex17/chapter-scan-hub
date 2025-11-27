@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { ArrowLeft, Camera, Upload, CheckCircle2, Zap, Clock, CheckCheck, XCircle } from "lucide-react";
+import { ArrowLeft, Camera, Upload, CheckCircle2, Zap, Clock, CheckCheck, XCircle, QrCode } from "lucide-react";
 import { QrReader } from "react-qr-reader";
 
 interface QueueItem {
@@ -281,22 +281,31 @@ const Scanner = () => {
             </Button>
           </Link>
 
-          {scanMode === "camera" && (
-            <Button
-              variant={batchMode ? "default" : "outline"}
-              onClick={() => {
-                setBatchMode(!batchMode);
-                if (!batchMode) {
-                  toast.success("Batch mode enabled");
-                } else {
-                  toast.info("Batch mode disabled");
-                }
-              }}
-            >
-              <Zap className="h-4 w-4 mr-2" />
-              Batch Mode
-            </Button>
-          )}
+          <div className="flex gap-2">
+            <Link to="/qr-generator">
+              <Button variant="secondary">
+                <QrCode className="h-4 w-4 mr-2" />
+                Generate QR
+              </Button>
+            </Link>
+
+            {scanMode === "camera" && (
+              <Button
+                variant={batchMode ? "default" : "outline"}
+                onClick={() => {
+                  setBatchMode(!batchMode);
+                  if (!batchMode) {
+                    toast.success("Batch mode enabled");
+                  } else {
+                    toast.info("Batch mode disabled");
+                  }
+                }}
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                Batch Mode
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="max-w-2xl mx-auto space-y-6">

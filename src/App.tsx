@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import ChapterDetail from "./pages/ChapterDetail";
 import Scanner from "./pages/Scanner";
+import QRGenerator from "./pages/QRGenerator";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
           <Route path="/" element={<Dashboard />} />
           <Route path="/chapter/:chapter" element={<ChapterDetail />} />
           <Route path="/scanner" element={<Scanner />} />
+          <Route path="/qr-generator" element={<QRGenerator />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

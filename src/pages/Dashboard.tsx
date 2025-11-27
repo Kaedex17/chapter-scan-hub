@@ -1,5 +1,7 @@
 import { ChapterCard } from "@/components/ChapterCard";
-import { BookOpen } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { BookOpen, QrCode } from "lucide-react";
 
 const chapters = [
   { name: "Main", path: "main" },
@@ -22,6 +24,15 @@ const Dashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-12 md:py-20 relative z-10">
+        <div className="flex justify-end mb-6 gap-3">
+          <Link to="/qr-generator">
+            <Button variant="outline" size="lg">
+              <QrCode className="h-5 w-5 mr-2" />
+              QR Generator
+            </Button>
+          </Link>
+        </div>
+
         <div className="mb-16 text-center space-y-6">
           <div className="flex justify-center mb-6 animate-in fade-in slide-in-from-top-4 duration-700">
             <div className="relative">
