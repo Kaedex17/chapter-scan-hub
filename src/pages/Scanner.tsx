@@ -124,31 +124,29 @@ const Scanner = () => {
     let checksum: string | undefined;
     let verified = false;
 
-    // Try to parse as JSON first
+    // Parse JSON only
     try {
       const parsed = JSON.parse(data.trim());
-      if (parsed.idNumber) {
-        idNumber = parsed.idNumber.toString().trim();
-        checksum = parsed.checksum;
+      if (!parsed.idNumber) {
+        toast.error("Invalid QR code: missing idNumber field");
+        return;
+      }
+      
+      idNumber = parsed.idNumber.toString().trim();
+      checksum = parsed.checksum;
+      
+      // Checksum validation if present
+      if (checksum) {
+        const expectedChecksum = idNumber.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0).toString(36);
+        verified = checksum === expectedChecksum;
         
-        // Simple checksum validation if present
-        if (checksum) {
-          const expectedChecksum = idNumber.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0).toString(36);
-          verified = checksum === expectedChecksum;
-          
-          if (!verified) {
-            toast.warning("Checksum mismatch - proceeding with caution");
-          } else {
-            verified = true;
-          }
+        if (!verified) {
+          toast.warning("Checksum mismatch - proceeding with caution");
         }
-      } else {
-        // JSON but no idNumber field - treat as plain text
-        idNumber = data.trim();
       }
     } catch {
-      // Not JSON, treat as plain text ID
-      idNumber = data.trim();
+      toast.error("Invalid QR code: must be JSON format");
+      return;
     }
 
     const now = Date.now();
