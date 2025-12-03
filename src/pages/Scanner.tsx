@@ -124,29 +124,36 @@ const Scanner = () => {
     let checksum: string | undefined;
     let verified = false;
 
-    // Parse JSON only
+    const trimmedData = data.trim();
+
+    // Try parsing as JSON first, then fall back to plain text
     try {
-      const parsed = JSON.parse(data.trim());
-      if (!parsed.idNumber) {
-        toast.error("Invalid QR code: missing idNumber field");
+      const parsed = JSON.parse(trimmedData);
+      if (parsed.idNumber) {
+        idNumber = parsed.idNumber.toString().trim();
+        checksum = parsed.checksum;
+        
+        // Checksum validation if present
+        if (checksum) {
+          const expectedChecksum = idNumber.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0).toString(36);
+          verified = checksum === expectedChecksum;
+          
+          if (!verified) {
+            toast.warning("Checksum mismatch - proceeding with caution");
+          }
+        }
+      } else {
+        toast.error("Invalid QR code format");
         return;
       }
-      
-      idNumber = parsed.idNumber.toString().trim();
-      checksum = parsed.checksum;
-      
-      // Checksum validation if present
-      if (checksum) {
-        const expectedChecksum = idNumber.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0).toString(36);
-        verified = checksum === expectedChecksum;
-        
-        if (!verified) {
-          toast.warning("Checksum mismatch - proceeding with caution");
-        }
-      }
     } catch {
-      toast.error("Invalid QR code: must be JSON format");
-      return;
+      // Not JSON - treat as plain text ID number
+      if (/^\d+$/.test(trimmedData)) {
+        idNumber = trimmedData;
+      } else {
+        toast.error("Invalid QR code format");
+        return;
+      }
     }
 
     const now = Date.now();
