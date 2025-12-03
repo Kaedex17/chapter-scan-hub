@@ -20,7 +20,6 @@ interface Missionary {
 }
 
 const QRGenerator = () => {
-  const [format, setFormat] = useState<"plain" | "json">("json");
   const [manualId, setManualId] = useState("");
   const [missionaries, setMissionaries] = useState<Missionary[]>([]);
   const [selectedMissionary, setSelectedMissionary] = useState<string>("");
@@ -62,15 +61,11 @@ const QRGenerator = () => {
     const checksumValue = generateChecksum(idNumber);
     setChecksum(checksumValue);
 
-    if (format === "plain") {
-      setGeneratedData(idNumber);
-    } else {
-      const jsonData = {
-        idNumber: idNumber,
-        checksum: checksumValue,
-      };
-      setGeneratedData(JSON.stringify(jsonData));
-    }
+    const jsonData = {
+      idNumber: idNumber,
+      checksum: checksumValue,
+    };
+    setGeneratedData(JSON.stringify(jsonData));
 
     toast.success("QR code generated!");
   };
@@ -165,24 +160,9 @@ const QRGenerator = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Format Selection */}
-                <div className="space-y-2">
-                  <Label>Format</Label>
-                  <Select value={format} onValueChange={(value: "plain" | "json") => setFormat(value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="plain">Plain Text ID</SelectItem>
-                      <SelectItem value="json">JSON with Checksum</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {format === "json" && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2">
-                      <Shield className="h-4 w-4 text-secondary" />
-                      <span>Includes automatic checksum verification</span>
-                    </div>
-                  )}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-secondary/10 border border-secondary/20">
+                  <Shield className="h-4 w-4 text-secondary" />
+                  <span>JSON format with automatic checksum verification</span>
                 </div>
 
                 {/* Tabs for Manual or Select */}
@@ -252,7 +232,7 @@ const QRGenerator = () => {
                     <div className="p-3 rounded-lg bg-muted font-mono text-sm break-all">
                       {generatedData}
                     </div>
-                    {checksum && format === "json" && (
+                    {checksum && (
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">Checksum:</span>
                         <Badge variant="outline" className="font-mono">
@@ -285,8 +265,8 @@ const QRGenerator = () => {
                       />
                     </div>
                     <div className="flex flex-col items-center gap-2 text-center">
-                      <Badge variant={format === "json" ? "default" : "secondary"} className="text-xs">
-                        {format === "json" ? "JSON Format with Checksum" : "Plain Text Format"}
+                      <Badge variant="default" className="text-xs">
+                        JSON Format with Checksum
                       </Badge>
                       <p className="text-sm text-muted-foreground">
                         Scan this QR code with the scanner to mark attendance
